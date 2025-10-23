@@ -43,7 +43,7 @@ jobs:
 
       # Publicar resultados como artefactos
       - name: Upload results as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: scan-results
           path: ./scan-results/
