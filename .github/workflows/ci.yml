@@ -44,7 +44,7 @@ jobs:
 
       # Publicar los resultados de los análisis
       - name: Upload results as artifact
-        uses: actions/upload-artifact@v2.3.0
+        uses: actions/upload-artifact@v4
         with:
           name: scan-results
           path: ./scan-results/
