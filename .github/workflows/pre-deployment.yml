@@ -21,11 +21,11 @@ jobs:
       - name: Build Docker image
         run: docker build -t arlethl/scout-cli:latest .
 
-      # Corregir el parámetro 'only-severities'
+      # Ejecutar Docker Scout CVE Analysis
       - name: Run Docker Scout CVE Analysis
         uses: docker/scout-action@v1
         with:
-          image: arlethl/checklistctpat:latest  # Usar el repositorio que ya tienes en Docker Hub
+          image: arlethl/checklistctpat:latest  # Repositorio de Docker Hub
           command: cves
           only-severities: critical,high
           exit-code: true
@@ -45,13 +45,14 @@ jobs:
           command: policy
           exit-code: true
 
-      - name: Push Docker image to Docker Hub
+      # Autenticación para Docker Hub
+      - name: Log into Docker Hub
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}  
+          username: ${{ secrets.DOCKER_USERNAME }}  # Usando el secreto de Docker Hub
+          password: ${{ secrets.DOCKER_TOKEN }}  # Usando el token de Docker Hub
 
-      - name: Push the image to Docker Hub
+      - name: Push Docker image to Docker Hub
         run: docker push arlethl/scout-cli:latest
 
       - name: Export CVEs to JSON and upload as artifact
