@@ -21,13 +21,13 @@ jobs:
       - name: Build Docker image
         run: docker build -t arlethl/scout-cli:latest .
 
-      # Corregir el parámetro 
+      # Corregir el parámetro 'only-severities'
       - name: Run Docker Scout CVE Analysis
         uses: docker/scout-action@v1
         with:
-          image: arlethl/scout-cli:latest
+          image: arlethl/checklistctpat:latest  # Usar el repositorio que ya tienes en Docker Hub
           command: cves
-          only-severities: critical,high  # Corregido 'only-severity' por 'only-severities'
+          only-severities: critical,high
           exit-code: true
 
       - name: Run Docker Scout Recommendations
@@ -35,7 +35,7 @@ jobs:
         with:
           image: arlethl/scout-cli:latest
           command: recommendations
-          only-severities: critical,high  # Corregido aquí también
+          only-severities: critical,high
           exit-code: true
 
       - name: Evaluate Security Policies with Docker Scout
