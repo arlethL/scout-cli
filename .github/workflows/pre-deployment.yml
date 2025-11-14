@@ -21,7 +21,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t arlethl/scout-cli:latest .
 
-      # Corregir el parámetro 'only-severities'
+      # Corregir el parámetro 
       - name: Run Docker Scout CVE Analysis
         uses: docker/scout-action@v1
         with:
