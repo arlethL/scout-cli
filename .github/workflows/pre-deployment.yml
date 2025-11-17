@@ -1,11 +1,17 @@
 name: Pre-Deployment Workflow (Docker Scout)
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  # Lo lanzas a mano desde la pestaña Actions
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag de la imagen a validar (por ejemplo: 4aa2a5d)"
+        required: true
+        default: "latest"
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: arlethl/scout-cli   # mismo repo que tu CI
 
 jobs:
   pre-deploy:
@@ -13,44 +19,65 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Login con tu token de Docker Hub (SECRETS: DOCKER_USERNAME / DOCKER_TOKEN)
+      # Login usando los mismos secrets que ya funcionan en el CI
       - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PAT }}
 
-      # (Opcional) Construir tu imagen local del repo
-      - name: Build image
-        run: docker build -t arlethl/scout-cli:latest .
+      # Resolver la imagen candidata (la que construyó el CI)
+      - name: Resolve image reference
+        id: image
+        run: |
+          IMAGE_REF=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
+          echo "IMAGE_REF=$IMAGE_REF" >> $GITHUB_ENV
+          echo "Usaremos la imagen: $IMAGE_REF"
 
-      # CVEs sobre la imagen que sí tienes activada en Scout (checklistctpat)
-      - name: CVE scan (checklistctpat)
-        run: docker scout cves arlethl/checklistctpat:latest --only-severities critical,high --exit-code
+      - name: Pull candidate image
+        run: docker pull "$IMAGE_REF"
 
-      # Recomendaciones sobre tu imagen recién construida
+      # Instalar Docker Scout CLI en el runner
+      - name: Install Docker Scout CLI
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
+
+      # Análisis de CVEs críticos/altos
+      - name: CVE scan (scout-cli)
+        run: |
+          docker scout cves "$IMAGE_REF" \
+            --only-severities critical,high \
+            --only-fixed \
+            --exit-code \
+            --output json > cves.json
+
+      # Recomendaciones sobre la misma imagen
       - name: Recommendations (scout-cli)
-        run: docker scout recommendations arlethl/scout-cli:latest --only-severities critical,high --exit-code
+        run: |
+          docker scout recommendations "$IMAGE_REF" \
+            --only-severities critical,high \
+            --exit-code \
+            --output json > recommendations.json || true
 
-      # (Opcional) Políticas si las tienes definidas en Scout
-      - name: Policy evaluation (scout-cli)
-        run: docker scout policy arlethl/scout-cli:latest --exit-code || true
+      # Si todo pasó, marcamos esta imagen como 'stable' y la pusheamos
+      - name: Tag as stable & push
+        if: success()
+        run: |
+          STABLE_REF=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable
+          docker tag "$IMAGE_REF" "$STABLE_REF"
+          docker push "$STABLE_REF"
 
-      # Push si pasó todo
-      - name: Push image
-        run: docker push arlethl/scout-cli:latest
-
-      # Exportar reporte JSON como evidencia
-      - name: Export CVEs JSON
-        run: docker scout cves arlethl/scout-cli:latest --output json > cves.json
-
-      - name: Upload artifact
+      # Subir reportes como artefactos
+      - name: Upload CVE & recommendations reports
         uses: actions/upload-artifact@v4
         with:
-          name: cves-report
-          path: cves.json
+          name: pre-deployment-reports
+          path: |
+            cves.json
+            recommendations.json
