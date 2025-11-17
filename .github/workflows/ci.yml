@@ -51,7 +51,6 @@ jobs:
             type=semver,pattern=v{{version}}
             type=sha,prefix=,suffix=,format=short
       
-      # Build & push image
       - name: Build and push Docker image
         id: build-and-push
         uses: docker/build-push-action@v4.0.0
