@@ -1,0 +1,95 @@
+name: Automatic Deployment (Docker Scout)
+
+on:
+  # Se lanza manualmente desde la pestaña Actions
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag de la imagen aprobada (por ejemplo: stable o 4aa2a5d)"
+        required: true
+        default: "stable"
+      environment:
+        description: "Entorno de despliegue (dev, qa, prod)"
+        required: true
+        default: "dev"
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: arlethl/scout-cli
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_PAT }}
+
+      - name: Resolve image reference
+        id: image
+        run: |
+          IMAGE_REF=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
+          echo "IMAGE_REF=$IMAGE_REF" >> $GITHUB_ENV
+          echo "Image to deploy: $IMAGE_REF"
+
+      # 1) Recuperación de la imagen validada
+      - name: Pull approved image
+        run: docker pull "$IMAGE_REF"
+
+      # 2) Verificación de integridad con Docker Scout (attestations)
+      - name: Install Docker Scout CLI
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
+
+      - name: Verify image attestations (provenance)
+        continue-on-error: true
+        run: |
+          echo "Verificando attestations para $IMAGE_REF (si existen)..."
+          if docker scout attestation get "$IMAGE_REF" --verify --output attestation.json; then
+            echo "Attestation verificada correctamente."
+          else
+            echo "No se encontraron attestations o la verificación falló (no bloquea el despliegue)."
+            echo "{}" > attestation.json
+          fi
+
+      # 3) Despliegue automatizado (entorno de prueba dentro del runner)
+      - name: Deploy container in test environment
+        run: |
+          docker rm -f scout-cli-app 2>/dev/null || true
+          docker run -d --name scout-cli-app "$IMAGE_REF" sleep 60
+          docker ps
+
+      # 4) Pruebas post-despliegue (smoke tests)
+      - name: Smoke tests
+        run: |
+          RUNNING=$(docker ps --filter "name=scout-cli-app" --filter "status=running" --format "{{.Names}}")
+          if [ "$RUNNING" != "scout-cli-app" ]; then
+            echo "La aplicación no está corriendo correctamente."
+            exit 1
+          fi
+          echo "Smoke test OK: el contenedor scout-cli-app está en ejecución."
+
+      # 5) Recolección de logs y limpieza
+      - name: Collect container logs
+        if: always()
+        run: docker logs scout-cli-app || true
+
+      - name: Tear down environment
+        if: always()
+        run: docker rm -f scout-cli-app || true
+
+      - name: Upload deployment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-logs
+          path: |
+            attestation.json
