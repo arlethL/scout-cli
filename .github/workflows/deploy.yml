@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Tag de la imagen aprobada (por ejemplo: stable o 4aa2a5d)"
+        description: "Tag de la imagen aprobada"
         required: true
         default: "stable"
       environment:
-        description: "Entorno de despliegue (dev, qa, prod)"
+        description: "Entorno de despliegue"
         required: true
         default: "dev"
 
@@ -36,7 +36,6 @@ jobs:
         run: |
           IMAGE_REF=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
           echo "IMAGE_REF=$IMAGE_REF" >> $GITHUB_ENV
-          echo "Image to deploy: $IMAGE_REF"
 
       - name: Pull approved image
         run: docker pull "$IMAGE_REF"
@@ -45,14 +44,12 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
 
-      - name: Verify image attestations (provenance)
+      - name: Verify image attestations
         continue-on-error: true
         run: |
-          echo "Verificando attestations para $IMAGE_REF..."
           if docker scout attestation get "$IMAGE_REF" --verify --output attestation.json; then
-            echo "Attestation verificada."
+            echo "Attestation OK"
           else
-            echo "No hay attestations o la verificación falló (no bloquea)."
             echo "{}" > attestation.json
           fi
 
@@ -60,18 +57,17 @@ jobs:
         run: |
           docker rm -f scout-cli-app 2>/dev/null || true
           docker run -d --name scout-cli-app "$IMAGE_REF" sleep 60
-          docker ps
 
       - name: Smoke tests
         run: |
           RUNNING=$(docker ps --filter "name=scout-cli-app" --filter "status=running" --format "{{.Names}}")
           if [ "$RUNNING" != "scout-cli-app" ]; then
-            echo "La aplicación no está corriendo."
+            echo "La app no está corriendo"
             exit 1
           fi
-          echo "Smoke test OK: el contenedor está en ejecución."
+          echo "Smoke test OK"
 
-      - name: Collect container logs
+      - name: Collect logs
         if: always()
         run: docker logs scout-cli-app || true
 
