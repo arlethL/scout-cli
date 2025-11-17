@@ -1,7 +1,6 @@
 name: Automatic Deployment (Docker Scout)
 
 on:
-  # Se lanza manualmente desde la pestaña Actions
   workflow_dispatch:
     inputs:
       image_tag:
@@ -34,17 +33,14 @@ jobs:
           password: ${{ secrets.DOCKER_PAT }}
 
       - name: Resolve image reference
-        id: image
         run: |
           IMAGE_REF=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag }}
           echo "IMAGE_REF=$IMAGE_REF" >> $GITHUB_ENV
           echo "Image to deploy: $IMAGE_REF"
 
-      # 1) Recuperación de la imagen validada
       - name: Pull approved image
         run: docker pull "$IMAGE_REF"
 
-      # 2) Verificación de integridad con Docker Scout (attestations)
       - name: Install Docker Scout CLI
         run: |
           curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
@@ -52,32 +48,29 @@ jobs:
       - name: Verify image attestations (provenance)
         continue-on-error: true
         run: |
-          echo "Verificando attestations para $IMAGE_REF (si existen)..."
+          echo "Verificando attestations para $IMAGE_REF..."
           if docker scout attestation get "$IMAGE_REF" --verify --output attestation.json; then
-            echo "Attestation verificada correctamente."
+            echo "Attestation verificada."
           else
-            echo "No se encontraron attestations o la verificación falló (no bloquea el despliegue)."
+            echo "No hay attestations o la verificación falló (no bloquea)."
             echo "{}" > attestation.json
           fi
 
-      # 3) Despliegue automatizado (entorno de prueba dentro del runner)
       - name: Deploy container in test environment
         run: |
           docker rm -f scout-cli-app 2>/dev/null || true
           docker run -d --name scout-cli-app "$IMAGE_REF" sleep 60
           docker ps
 
-      # 4) Pruebas post-despliegue (smoke tests)
       - name: Smoke tests
         run: |
           RUNNING=$(docker ps --filter "name=scout-cli-app" --filter "status=running" --format "{{.Names}}")
           if [ "$RUNNING" != "scout-cli-app" ]; then
-            echo "La aplicación no está corriendo correctamente."
+            echo "La aplicación no está corriendo."
             exit 1
           fi
-          echo "Smoke test OK: el contenedor scout-cli-app está en ejecución."
+          echo "Smoke test OK: el contenedor está en ejecución."
 
-      # 5) Recolección de logs y limpieza
       - name: Collect container logs
         if: always()
         run: docker logs scout-cli-app || true
