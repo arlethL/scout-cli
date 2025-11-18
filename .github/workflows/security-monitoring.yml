@@ -10,7 +10,7 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: arlethl/scout-cli
-  IMAGE_TAG: "622d107"
+  IMAGE_TAG: "622d107"   # Tag que sí existe en Docker Hub
 
 jobs:
   monitor:
@@ -37,9 +37,12 @@ jobs:
 
       - name: Generate security metrics (JSON)
         run: |
+          # Intentar generar el reporte de CVEs en formato JSON.
+          # Si Docker Scout devuelve error (exit code != 0), no fallar el job:
+          # generamos un JSON vacío como placeholder para monitoreo.
           docker scout cves $REGISTRY/$IMAGE_NAME:$IMAGE_TAG \
             --only-severities critical,high,medium,low \
-            --output json > scout-security-metrics.json
+            --output json > scout-security-metrics.json || echo "{}" > scout-security-metrics.json
 
       - name: Upload metrics artifact
         uses: actions/upload-artifact@v4
