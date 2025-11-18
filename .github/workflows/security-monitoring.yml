@@ -10,7 +10,7 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: arlethl/scout-cli
-  IMAGE_TAG: latest
+  IMAGE_TAG: "622d107"
 
 jobs:
   monitor:
